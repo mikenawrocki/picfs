@@ -1,7 +1,7 @@
 OBJS := main.o
 CFLAGS := -std=gnu99 -Wall -c -g
 CFLAGS += $(shell pkg-config --cflags fuse)
-LDFLAGS := $(shell pkg-config --libs fuse)
+LDFLAGS := $(shell pkg-config --libs fuse) -lexif
 DEFINES := -D FUSE_USE_VERSION=29 -D _GNU_SOURCE
 
 all: mpv
