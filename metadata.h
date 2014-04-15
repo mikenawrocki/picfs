@@ -2,6 +2,7 @@
 #define METADATA_H
 
 #include <unistd.h>
+#include <stdint.h>
 
 // Use AES256
 #define IVLEN 32
@@ -15,7 +16,7 @@ struct user_key {
 
 struct metadata {
 	uint8_t iv[IVLEN];
-	uint16_t n_sub_info;
+	uint16_t n_user_keys;
 	struct user_key user_keys[0]; //Varible sized array of user keys.
 };
 
