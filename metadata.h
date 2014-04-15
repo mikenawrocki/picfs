@@ -12,12 +12,12 @@
 struct user_key {
 	uid_t owner;
 	uint8_t encrypted_key[ENC_KEYLEN];
-};
+}__attribute__((packed));
 
 struct metadata {
 	uint8_t iv[IVLEN];
 	uint16_t n_user_keys;
 	struct user_key user_keys[0]; //Varible sized array of user keys.
-};
+} __attribute__((packed));
 
 #endif
