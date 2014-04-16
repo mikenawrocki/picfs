@@ -23,7 +23,8 @@ int metadata_uid_exists(FILE *metadata, uid_t uid);
  * Returns the number of bytes that were decrypted (should always be 32 for
  * AES256)
  */
-int decrypt_metadata_key(FILE *metadata, char *buf, size_t len);
+int decrypt_metadata(FILE *metadata, char *key_buf, char *iv_buf, size_t keylen,
+		size_t ivlen);
 
 /*
  * Encrypt a provided symmetric key using a target user's public RSA key.

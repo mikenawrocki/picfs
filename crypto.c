@@ -33,7 +33,8 @@ int metadata_uid_exists(FILE *metadata, uid_t uid)
 	return 0;
 }
 
-int decrypt_metadata_key(FILE *metadata, char *buf, size_t len)
+int decrypt_metadata(FILE *metadata, char *key_buf, char *iv_buf, size_t keylen,
+		size_t ivlen)
 {
 	int read_num, i, ret = 0;
 	struct metadata md;
@@ -57,16 +58,20 @@ int decrypt_metadata_key(FILE *metadata, char *buf, size_t len)
 		return -1; //Invalid UID
 	}
 
+	if(iv_buf) {
+		memcpy(iv_buf, md.iv, IVLEN);
+	}
+
 	err = malloc(130);
 	if((ret = RSA_private_decrypt(ENC_KEYLEN, (unsigned char*)uk.encrypted_key,
-					(unsigned char*)buf, keypair,
+					(unsigned char*)key_buf, keypair,
 					RSA_PKCS1_OAEP_PADDING)) < 0) {
 		ERR_load_crypto_strings();
 		ERR_error_string(ERR_get_error(), err);
 		fprintf(stderr, "Error decrypting message: %s\n", err);
 		ret = -1;
 	}
-	printf("Decrypted message: %s\n", buf);
+	printf("Decrypted message: %s\n", key_buf);
 	free(err);
 	return ret;
 }
