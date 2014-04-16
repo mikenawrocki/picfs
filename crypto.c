@@ -33,8 +33,8 @@ int metadata_uid_exists(FILE *metadata, uid_t uid)
 	return 0;
 }
 
-int decrypt_metadata(FILE *metadata, char *key_buf, char *iv_buf, size_t keylen,
-		size_t ivlen)
+int decrypt_metadata(FILE *metadata, unsigned char *key_buf,
+		unsigned char *iv_buf, size_t keylen, size_t ivlen)
 {
 	int read_num, i, ret = 0;
 	struct metadata md;
@@ -76,8 +76,8 @@ int decrypt_metadata(FILE *metadata, char *key_buf, char *iv_buf, size_t keylen,
 	return ret;
 }
 
-int encrypt_symmetric_key(uid_t target, const char *key, size_t key_len,
-		char *buf, size_t buf_len)
+int encrypt_symmetric_key(uid_t target, const unsigned char *key,
+		size_t key_len, char *buf, size_t buf_len)
 {
 	int ret = 0;
 	char pub_key_path[PATH_MAX];
@@ -131,7 +131,7 @@ int write_new_user_key(FILE *metadata, struct user_key *uk)
 	return ret;
 }
 
-int create_metadata_file(const char *path, const char *IV)
+int create_metadata_file(const char *path, const unsigned char *IV)
 {
 	struct metadata md;
 	FILE *metadata = fopen(path, "w+");
@@ -145,7 +145,7 @@ int create_metadata_file(const char *path, const char *IV)
 	return 0;
 }
 
-int add_user_key(FILE *metadata, uid_t uid, char *key)
+int add_user_key(FILE *metadata, uid_t uid, unsigned char *key)
 {
 	int encrypt_len, ret = 0;
 	int text_len = 32;
