@@ -7,10 +7,10 @@ DEFINES := -D FUSE_USE_VERSION=29 -D _GNU_SOURCE
 all: mpv
 
 %.o : %.c
-	gcc ${CFLAGS} ${LDFLAGS} ${DEFINES} $^ -o $@
+	$(CC) ${CFLAGS} ${LDFLAGS} ${DEFINES} $^ -o $@
 
 mpv: ${OBJS}
-	gcc $^ ${LDFLAGS} -o $@
+	$(CC) $^ ${LDFLAGS} -o $@
 
 .PHONY: clean
 clean:
