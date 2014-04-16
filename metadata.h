@@ -8,6 +8,7 @@
 #define IVLEN 32
 // 256 bytes for PKCS#1 padding of an encrypted AES256 key
 #define ENC_KEYLEN 256
+#define AES256_KEYLEN 32
 
 struct user_key {
 	uid_t owner;
