@@ -165,3 +165,44 @@ int add_user_key(FILE *metadata, uid_t uid, char *key)
 	ret = write_new_user_key(metadata, &uk);
 	return ret;
 }
+
+void mpv_aes_init(unsigned char *key, unsigned char *iv, evp_cipher_ctx *e_ctx,
+		evp_cipher_ctx *d_ctx)
+{
+	if (e_ctx) {
+		evp_cipher_ctx_init(e_ctx);
+		evp_encryptinit_ex(e_ctx, evp_aes_256_cbc(), null, key, iv);
+	}
+	if (d_ctx) {
+		evp_cipher_ctx_init(d_ctx);
+		evp_decryptinit_ex(d_ctx, evp_aes_256_cbc(), null, key, iv);
+	}
+}
+
+unsigned char *mpv_aes_encrypt(evp_cipher_ctx *e, unsigned char *plaintext,
+		int *len)
+{
+	int c_len = *len + aes_block_size, f_len = 0;
+	unsigned char *ciphertext = malloc(c_len);
+
+	evp_encryptinit_ex(e, null, null, null, null);
+	evp_encryptupdate(e, ciphertext, &c_len, plaintext, *len);
+	evp_encryptfinal_ex(e, ciphertext + c_len, &f_len);
+
+	*len = c_len + f_len;
+	return ciphertext;
+}
+
+unsigned char *mpv_aes_decrypt(evp_cipher_ctx *d, unsigned char *ciphertext,
+		int *len)
+{
+	int p_len = *len, f_len = 0;
+	unsigned char *plaintext = malloc(p_len + aes_block_size);
+
+	evp_decryptinit_ex(d, null, null, null, null);
+	evp_decryptupdate(d, plaintext, &p_len, ciphertext, *len);
+	evp_decryptfinal_ex(d, plaintext + p_len, &f_len);
+
+	*len = p_len + f_len;
+	return plaintext;
+}
