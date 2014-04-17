@@ -12,7 +12,6 @@ static int compare_uids(const void *a, const void *b)
 
 int get_acl_uids(acl_t acl, uid_t *uid_arr, int max_elems)
 {
-	acl_type_t type = ACL_TYPE_ACCESS;
 	acl_entry_t entry;
 	acl_tag_t tag;
 	uid_t *uidp;
