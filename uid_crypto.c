@@ -40,6 +40,7 @@ RSA* create_key(char* path, int mode)
 	{
 		const EVP_CIPHER* cipher = EVP_aes_256_cbc();
 		successful = PEM_write_RSAPrivateKey(file,rsa_key,cipher,NULL,0,NULL,NULL);
+		chmod(key_path, 0600);
 	} else if(mode == PUBLIC)
 	{
 		successful = PEM_write_RSA_PUBKEY(file,rsa_key);
@@ -116,7 +117,7 @@ RSA* get_uid_rsa()
 	snprintf(uid_str, 16, "%u", current_uid);
 	strncat(path, uid_str, PATH_MAX);
 	
-	err = mkdir(path, S_IRWXU);
+	err = mkdir(path, 0755);
 	if(err == -1) {
 		if(errno != EEXIST)
 			return NULL;
