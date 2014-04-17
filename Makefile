@@ -1,11 +1,10 @@
-OBJS := main.o crypto.o acl.o
+OBJS := main.o crypto.o acl.o uid_crypto.o
 CFLAGS := -std=gnu99 -Wall -c -g
 CFLAGS += $(shell pkg-config --cflags fuse)
-LDFLAGS := $(shell pkg-config --libs fuse) -lexif -lacl -lcrypto
+LDFLAGS := $(shell pkg-config --libs fuse) -lexif -lacl -lssl -lcrypto
 DEFINES := -D FUSE_USE_VERSION=29 -D _GNU_SOURCE
 
 all: mpv
-
 %.o : %.c
 	gcc ${CFLAGS} ${LDFLAGS} ${DEFINES} $^ -o $@
 
