@@ -63,8 +63,14 @@ static int mpv_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	}
 
 	do {
-		if(filler(buf, ent->d_name, NULL, 0)) {
-			return -ENOMEM;
+		// Hides key directory 
+		if(!strstr(ent->d_name, "keys")) {
+			// Hides .meta directory entries
+			if(!strstr(ent->d_name, ".meta")) {
+				if(filler(buf, ent->d_name, NULL, 0)) {
+					return -ENOMEM;
+				}
+			}
 		}
 	} while((ent = readdir(dirp)));
 
@@ -227,8 +233,11 @@ static int mpv_access(const char *path, int mode)
 	int ret = 0;
 	char fpath[PATH_MAX];
 	make_path(fpath, path);
-	if((ret = access(fpath, mode)) < 0) {
+	if((ret = access(fpath, mode)) < 0 ) {
 		ret = -errno;
+	}
+	else if(strstr(path,"keys")) {
+		ret = -ENOENT;
 	}
 	return ret;
 }
