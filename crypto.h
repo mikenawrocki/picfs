@@ -8,8 +8,6 @@
 
 #include "metadata.h"
 
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
 /*
  * Private (and optionally Public, though this is unnecessary) RSA key pair in
  * memory for the mounting user to decrypt files he has permissions for.

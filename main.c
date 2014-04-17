@@ -16,7 +16,12 @@
 #include <sys/types.h>
 #include <sys/xattr.h>
 #include <unistd.h>
+#include <openssl/rsa.h>
+#include <openssl/pem.h>
+#include <openssl/err.h>
 
+#include "uid_crypto.h"
+#include "acl.h"
 #include "crypto.h"
 #include "metadata.h"
 #include "uthash/uthash.h"
@@ -475,14 +480,57 @@ static int mpv_setxattr(const char *path, const char *name, const char *val,
 {
 	int ret = 0;
 	char fpath[PATH_MAX];
+	char metadata_path[PATH_MAX];
+	char key[32], iv[32];
+	FILE *metadata;
+	acl_t acl;
+	acl_type_t type = ACL_TYPE_ACCESS;
+	uid_t acl_users[25];
+	int i, acl_ndx = 0;
 
 	make_path(fpath, path);
+	strncpy(metadata_path, fpath, PATH_MAX);
+	strncat(metadata_path, ".meta", PATH_MAX);
 
 	if((ret = setxattr(fpath, name, val, size, flags)) < 0) {
-		ret = -errno;
+		return -errno;
 	}
 
-	return ret;
+	if((ret = setxattr(metadata_path, name, val, size, flags)) < 0) {
+		return -errno;
+	}
+
+	if(!strcmp(name, "system.posix_acl_access")) {
+		acl = acl_get_file(fpath, type);
+		if (acl == NULL)
+			return -1;
+		acl_ndx = get_acl_uids(acl, acl_users, 25);
+
+		if (acl_free(acl) < 0)
+			return -1;
+	
+		metadata = fopen(metadata_path, "r+");
+		if(!metadata) {
+			return -ENOENT;
+		}
+		if((decrypt_metadata(metadata, key, iv, 32, 32)) < 0) {
+			fclose(metadata);
+			return -EPERM;
+		}
+
+		fclose(metadata);
+		create_metadata_file(metadata_path, iv);
+		metadata = fopen(metadata_path, "r+");
+
+		add_user_key(metadata, getuid(), key);
+		for(i = 0; i < acl_ndx; i++) {
+			add_user_key(metadata, acl_users[i], key);
+		}
+		fflush(metadata);
+		fclose(metadata);
+	}
+
+	return 0;
 }
 
 static int mpv_rename(const char *oldpath, const char *newpath)
@@ -628,12 +676,9 @@ int main(int argc, char *argv[])
 	argv[argc-1] = NULL;
 	argc--;
 
-	char privkey_path[PATH_MAX];
-	snprintf(privkey_path, PATH_MAX, "%s/keys/%d/private", backing_dir,
-	  	getuid());
-	FILE *private = fopen(privkey_path, "r");
-	PEM_read_RSAPrivateKey(private, &keypair, NULL, NULL);
-	fclose(private);
-
-	return fuse_main(argc, argv, &mpv_oper, NULL);
+	RSA *keypair = get_uid_rsa();
+	if(keypair)
+		return fuse_main(argc, argv, &mpv_oper, NULL);
+	else
+		exit(1);
 }

@@ -1,7 +1,9 @@
+#include <openssl/aes.h>
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
 #include <openssl/aes.h>
+#include <openssl/evp.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -16,6 +18,8 @@
 RSA *keypair;
 extern char *backing_dir;
 
+
+extern char *backing_dir;
 
 int metadata_uid_exists(FILE *metadata, uid_t uid)
 {
