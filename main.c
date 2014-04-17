@@ -3,7 +3,9 @@
 #include <fcntl.h>
 #include <fuse.h>
 #include <limits.h>
+#include <openssl/pem.h>
 #include <openssl/rand.h>
+#include <openssl/rsa.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,7 +29,7 @@ typedef struct table_entry {
 } table_entry;
 
 static table_entry *fd_to_decrypted = NULL;
-static char *backing_dir;
+char *backing_dir;
 
 static inline void make_path(char fpath[PATH_MAX], const char *path)
 {
@@ -93,13 +95,18 @@ static int mpv_open(const char *path, struct fuse_file_info *fi)
 
 	make_path(fpath, path);
 	if((fd = open(fpath, fi->flags)) < 0) {
+		printf("ERROR: %s\n", fpath);
 		return -errno;
 	}
 
 	olen = len = lseek(fd, 0, SEEK_END);
 	lseek(fd, 0, SEEK_SET);
 
-	mapped_file = (unsigned char*)mmap(NULL, len, PROT_READ, MAP_FILE, fd, 0);
+	mapped_file = (unsigned char*)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
+	if (mapped_file == MAP_FAILED) {
+		perror("JAKE ERROR");
+		return -errno;
+	}
 
 	strncat(fpath, ".meta", PATH_MAX);
 	FILE *metadata = fopen(fpath, "r");
@@ -116,6 +123,7 @@ static int mpv_open(const char *path, struct fuse_file_info *fi)
 
 	munmap(mapped_file, olen);
 
+	//printf("decrypt_buff: %s\n", decrypt_buf);
 
 	table_entry *e = malloc(sizeof(table_entry));
 	e->fd = fd;
@@ -134,6 +142,11 @@ static int mpv_read(const char *path, char *buf, size_t size, off_t offset,
 	HASH_FIND_INT(fd_to_decrypted, &fi->fh, e);
 	if(!e) return -errno;
 
+	if (size > e->len) {
+		printf("Read was %zu shrink to %d\n", size, e->len);
+		size = e->len;
+	}
+
 	memcpy(buf, e->decrypt_buf + offset, size);
 	return size;
 }
@@ -145,20 +158,26 @@ static int mpv_write(const char *path, const char *buf, size_t size,
 	HASH_FIND_INT(fd_to_decrypted, &fi->fh, e);
 	if(!e) return -errno;
 
+	if(size + offset > e->len) {
+		printf("Resizing from: %d to %lu bytes\n", e->len, size + offset);
+		e->decrypt_buf = realloc(e->decrypt_buf, size+offset);
+		e->len = size + offset;
+	}
+
 	memcpy(e->decrypt_buf + offset, buf, size);
 	return size;
 }
 
 static int mpv_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-	int fd;
+	int fd, ret = 0;
 	char fpath[PATH_MAX], mpath[PATH_MAX];
 	unsigned char *key = malloc(AES256_KEYLEN), *iv = malloc(IVLEN);
 
 	make_path(fpath, path);
 
 	if((fd = creat(fpath, mode)) < 0) {
-		return -errno;
+		ret = -errno;
 	}
 	uid_t uid = getuid();
 
@@ -173,12 +192,19 @@ static int mpv_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	add_user_key(metadata, uid, key);
 	fclose(metadata);
 
-	close(fd);
+	char *decrypt_buf = malloc(sizeof(char));
+	table_entry *e = malloc(sizeof(table_entry));
+	e->fd = fd;
+	e->len = 1;
+	e->decrypt_buf= decrypt_buf;
+	HASH_ADD_INT(fd_to_decrypted, fd, e);
+	fi->fh = fd;
+
 	//TODO Is it safe to free these now are they written to .meta file
 	free(key);
 	free(iv);
 
-	return mpv_open(fpath, fi);
+	return ret;
 
 }
 
@@ -286,8 +312,9 @@ static int mpv_ftruncate(const char *path, off_t offset,
 		e->len = offset;
 	}
 	else if(e->len < offset) {
-		realloc(e->decrypt_buf, e->len + offset);
+		e->decrypt_buf = realloc(e->decrypt_buf, e->len + offset);
 		memset(e->decrypt_buf + e->len, 0, offset);
+		e->len += offset;
 	}
 	return 0;
 }
@@ -370,21 +397,20 @@ static int mpv_release(const char *path, struct fuse_file_info *fi)
 	int ret = 0;
 	unsigned char *key = malloc(AES256_KEYLEN), *iv = malloc(IVLEN);
 	unsigned char *encrypt_buf;
-
-	if((ret = close(fi->fh)) < 0) {
-		ret = -errno;
-	}
+	char mpath[PATH_MAX];
 
 	table_entry *e;
 	HASH_FIND_INT(fd_to_decrypted, &fi->fh, e);
 	if(!e) fprintf(stderr, "Hash Key not found!\n");
 
-	strncat(fpath, ".meta", PATH_MAX);
-	FILE *metadata = fopen(fpath, "r");
+	make_path(mpath, path);
+	strncat(mpath, ".meta", PATH_MAX);
+	FILE *metadata = fopen(mpath, "r");
 	decrypt_metadata(metadata, key, iv, AES256_KEYLEN, IVLEN);
 	fclose(metadata);
 
 	// Encrypt buffer
+	printf("to encrypt: %s", e->decrypt_buf);
 	EVP_CIPHER_CTX e_ctx;
 	mpv_aes_init(key, iv, &e_ctx, NULL);
 	encrypt_buf = mpv_aes_encrypt(&e_ctx, e->decrypt_buf, &e->len);
@@ -402,6 +428,10 @@ static int mpv_release(const char *path, struct fuse_file_info *fi)
 	free(e->decrypt_buf);
 	free(e);
 	free(encrypt_buf);
+
+	if((ret = close(fi->fh)) < 0) {
+		ret = -errno;
+	}
 
 	return ret;
 }
@@ -536,6 +566,20 @@ static int mpv_truncate(const char *path, off_t offset)
 	return ret;
 }
 
+//TODO prune hidden files with stat
+static int mpv_statfs(const char *path, struct statvfs *statv)
+{
+	int ret = 0;
+	char fpath[PATH_MAX];
+
+	make_path(fpath, path);
+	if((ret = statvfs(fpath, statv)) < 0) {
+		ret = -errno;
+	}
+
+	return ret;
+}
+
 static struct fuse_operations mpv_oper = {
 	.getattr	= mpv_getattr,
 	.opendir	= mpv_opendir,
@@ -561,6 +605,7 @@ static struct fuse_operations mpv_oper = {
 	.fgetattr	= mpv_fgetattr,
 	.mkdir		= mpv_mkdir,
 	.rmdir		= mpv_rmdir,
+	.statfs 	= mpv_statfs,
 	.truncate	= mpv_truncate,				// open, ftruncate, close X
 	.rename		= mpv_rename,				// need to rename related metadata X
 	.link		= mpv_link,
@@ -575,6 +620,13 @@ int main(int argc, char *argv[])
 	argv[argc-2] = argv[argc-1];
 	argv[argc-1] = NULL;
 	argc--;
+
+	char privkey_path[PATH_MAX];
+	snprintf(privkey_path, PATH_MAX, "%s/keys/%d/private", backing_dir,
+	  	getuid());
+	FILE *private = fopen(privkey_path, "r");
+	PEM_read_RSAPrivateKey(private, &keypair, NULL, NULL);
+	fclose(private);
 
 	return fuse_main(argc, argv, &mpv_oper, NULL);
 }
