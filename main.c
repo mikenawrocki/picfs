@@ -142,9 +142,9 @@ static int mpv_read(const char *path, char *buf, size_t size, off_t offset,
 	HASH_FIND_INT(fd_to_decrypted, &fi->fh, e);
 	if(!e) return -errno;
 
-	if (size > e->len) {
-		printf("Read was %zu shrink to %d\n", size, e->len);
-		size = e->len;
+	if (size + offset > e->len) {
+		printf("Read was %zu shrink to %ld\n", size, e->len - offset);
+		size = e->len - offset;
 	}
 
 	memcpy(buf, e->decrypt_buf + offset, size);
@@ -312,9 +312,9 @@ static int mpv_ftruncate(const char *path, off_t offset,
 		e->len = offset;
 	}
 	else if(e->len < offset) {
-		e->decrypt_buf = realloc(e->decrypt_buf, e->len + offset);
-		memset(e->decrypt_buf + e->len, 0, offset);
-		e->len += offset;
+		e->decrypt_buf = realloc(e->decrypt_buf, offset);
+		memset(e->decrypt_buf + e->len, 0, offset - e->len);
+		e->len = offset;
 	}
 	return 0;
 }
@@ -489,14 +489,13 @@ static int mpv_rename(const char *oldpath, const char *newpath)
 	strncpy(m_newpath, f_newpath, PATH_MAX);
 
 	strncat(m_oldpath, ".meta", PATH_MAX);
-	strncat(m_oldpath, ".meta", PATH_MAX);
+	strncat(m_newpath, ".meta", PATH_MAX);
 
 	if((ret = rename(f_oldpath, f_newpath)) < 0) {
-		ret = -errno;
+		return -errno;
 	}
 	if((ret = rename(m_oldpath, m_newpath)) < 0) {
-		if (ret >= 0)
-			ret = -errno;
+		ret = -errno;
 	}
 
 	return ret;
@@ -543,11 +542,10 @@ static int mpv_unlink(const char *path)
 	strncat(mpath, ".meta", PATH_MAX);
 
 	if((ret = unlink(fpath)) < 0) {
-		ret = -errno;
+		return -errno;
 	}
 	if((ret = unlink(mpath)) < 0) {
-		if(ret >= 0)
-			ret = -errno;
+		ret = -errno;
 	}
 
 	return ret;
