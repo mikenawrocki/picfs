@@ -1,6 +1,8 @@
+#include <openssl/aes.h>
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -13,6 +15,8 @@
 #include "crypto.h"
 
 RSA *keypair;
+
+extern char *backing_dir;
 
 int metadata_uid_exists(FILE *metadata, uid_t uid)
 {
@@ -81,7 +85,7 @@ int encrypt_symmetric_key(uid_t target, const char *key, size_t key_len,
 {
 	int ret = 0;
 	char pub_key_path[PATH_MAX];
-	snprintf(pub_key_path, PATH_MAX, "keys/%d/public", target);
+	snprintf(pub_key_path, PATH_MAX, "%s/keys/%d/public", backing_dir, target);
 	FILE *public = fopen(pub_key_path, "r");
 	RSA *new_key = NULL;
 	if(!public) {
@@ -157,7 +161,8 @@ int add_user_key(FILE *metadata, uid_t uid, char *key)
 
 	if(!key) {
 		key = malloc(AES256_KEYLEN);
-		text_len = decrypt_metadata_key(metadata, key, AES256_KEYLEN);
+		text_len = decrypt_metadata(metadata, key, NULL,
+				AES256_KEYLEN, 0);
 		if(text_len < 0)
 			return -1;
 	}
@@ -171,42 +176,42 @@ int add_user_key(FILE *metadata, uid_t uid, char *key)
 	return ret;
 }
 
-void mpv_aes_init(unsigned char *key, unsigned char *iv, evp_cipher_ctx *e_ctx,
-		evp_cipher_ctx *d_ctx)
+void mpv_aes_init(unsigned char *key, unsigned char *iv, EVP_CIPHER_CTX *e_ctx,
+		EVP_CIPHER_CTX *d_ctx)
 {
 	if (e_ctx) {
-		evp_cipher_ctx_init(e_ctx);
-		evp_encryptinit_ex(e_ctx, evp_aes_256_cbc(), null, key, iv);
+		EVP_CIPHER_CTX_init(e_ctx);
+		EVP_EncryptInit_ex(e_ctx, EVP_aes_256_cbc(), NULL, key, iv);
 	}
 	if (d_ctx) {
-		evp_cipher_ctx_init(d_ctx);
-		evp_decryptinit_ex(d_ctx, evp_aes_256_cbc(), null, key, iv);
+		EVP_CIPHER_CTX_init(d_ctx);
+		EVP_DecryptInit_ex(d_ctx, EVP_aes_256_cbc(), NULL, key, iv);
 	}
 }
 
-unsigned char *mpv_aes_encrypt(evp_cipher_ctx *e, unsigned char *plaintext,
+unsigned char *mpv_aes_encrypt(EVP_CIPHER_CTX *e, unsigned char *plaintext,
 		int *len)
 {
-	int c_len = *len + aes_block_size, f_len = 0;
+	int c_len = *len + AES_BLOCK_SIZE, f_len = 0;
 	unsigned char *ciphertext = malloc(c_len);
 
-	evp_encryptinit_ex(e, null, null, null, null);
-	evp_encryptupdate(e, ciphertext, &c_len, plaintext, *len);
-	evp_encryptfinal_ex(e, ciphertext + c_len, &f_len);
+	EVP_EncryptInit_ex(e, NULL, NULL, NULL, NULL);
+	EVP_EncryptUpdate(e, ciphertext, &c_len, plaintext, *len);
+	EVP_EncryptFinal_ex(e, ciphertext + c_len, &f_len);
 
 	*len = c_len + f_len;
 	return ciphertext;
 }
 
-unsigned char *mpv_aes_decrypt(evp_cipher_ctx *d, unsigned char *ciphertext,
+unsigned char *mpv_aes_decrypt(EVP_CIPHER_CTX *d, unsigned char *ciphertext,
 		int *len)
 {
 	int p_len = *len, f_len = 0;
-	unsigned char *plaintext = malloc(p_len + aes_block_size);
+	unsigned char *plaintext = malloc(p_len + AES_BLOCK_SIZE);
 
-	evp_decryptinit_ex(d, null, null, null, null);
-	evp_decryptupdate(d, plaintext, &p_len, ciphertext, *len);
-	evp_decryptfinal_ex(d, plaintext + p_len, &f_len);
+	EVP_DecryptInit_ex(d, NULL, NULL, NULL, NULL);
+	EVP_DecryptUpdate(d, plaintext, &p_len, ciphertext, *len);
+	EVP_DecryptFinal_ex(d, plaintext + p_len, &f_len);
 
 	*len = p_len + f_len;
 	return plaintext;

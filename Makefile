@@ -1,4 +1,4 @@
-OBJS := main.o crypto.o
+OBJS := main.o crypto.o acl.o
 CFLAGS := -std=gnu99 -Wall -c -g
 CFLAGS += $(shell pkg-config --cflags fuse)
 LDFLAGS := $(shell pkg-config --libs fuse) -lexif -lacl -lcrypto

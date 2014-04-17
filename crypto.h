@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include "metadata.h"
+
 /*
  * Private (and optionally Public, though this is unnecessary) RSA key pair in
  * memory for the mounting user to decrypt files he has permissions for.
