@@ -78,6 +78,7 @@ RSA* existing_user(char* path, uid_t uid)
 
 RSA* get_uid_rsa()
 {
+	init_openssl();
 	uid_t current_uid = getuid();
 	char path[80];
 	strcpy(path, "keys/%d");
@@ -106,15 +107,4 @@ void init_openssl()
     }
     else
         exit(1);
-}
-
-int main(int argc, char const *argv[])
-{	
-	RSA* rsa_key;
-	init_openssl();
-	rsa_key = get_uid_rsa();
-	if(rsa_key)
-		printf("It works!\n");
-
-	return 0;
 }
