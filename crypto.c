@@ -14,6 +14,8 @@
 #include "crypto.h"
 
 RSA *keypair;
+extern char *backing_dir;
+
 
 int metadata_uid_exists(FILE *metadata, uid_t uid)
 {
@@ -82,7 +84,7 @@ int encrypt_symmetric_key(uid_t target, const unsigned char *key,
 {
 	int ret = 0;
 	char pub_key_path[PATH_MAX];
-	snprintf(pub_key_path, PATH_MAX, "keys/%d/public", target);
+	snprintf(pub_key_path, PATH_MAX, "%s/keys/%d/public", backing_dir, target);
 	FILE *public = fopen(pub_key_path, "r");
 	RSA *new_key = NULL;
 	if(!public) {
@@ -185,14 +187,14 @@ void mpv_aes_init(unsigned char *key, unsigned char *iv, EVP_CIPHER_CTX *e_ctx,
 	}
 }
 
-unsigned char *mpv_aes_encrypt(EVP_CIPHER_CTX *e, unsigned char *plaintext,
+unsigned char *mpv_aes_encrypt(EVP_CIPHER_CTX *e, char *plaintext,
 		int *len)
 {
 	int c_len = *len + AES_BLOCK_SIZE, f_len = 0;
 	unsigned char *ciphertext = malloc(c_len);
 
 	EVP_EncryptInit_ex(e, NULL, NULL, NULL, NULL);
-	EVP_EncryptUpdate(e, ciphertext, &c_len, plaintext, *len);
+	EVP_EncryptUpdate(e, ciphertext, &c_len, (unsigned char*)plaintext, *len);
 	EVP_EncryptFinal_ex(e, ciphertext + c_len, &f_len);
 
 	*len = c_len + f_len;

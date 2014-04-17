@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include "metadata.h"
+
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 /*
@@ -74,7 +76,7 @@ void mpv_aes_init(unsigned char *key, unsigned char *iv, EVP_CIPHER_CTX *e_ctx,
  * encrypt plaintext. Supply the plaintext and its corresponding length.
  * The len field will be replaced by the length of the returned cryptotext.
  */
-unsigned char *mpv_aes_encrypt(EVP_CIPHER_CTX *e, unsigned char *plaintext,
+unsigned char *mpv_aes_encrypt(EVP_CIPHER_CTX *e, char *plaintext,
 		int *len);
 
 /*
