@@ -1,6 +1,9 @@
 #include "uid_crypto.h"
 
-RSA* create_key(char* path, uid_t uid, int mode)
+const int PUBLIC = 1;
+const int PRIVATE = 2;
+
+RSA* create_key(char* path, int mode)
 {
 	//creating the private key
 	char key_path[80];
@@ -12,7 +15,7 @@ RSA* create_key(char* path, uid_t uid, int mode)
 		strcat(key_path, "/public");
 	else
 	{
-		fprintf(stderr, "Undefined mode\n");
+		fprintf(stderr, "uid_crypto.c - Undefined mode\n");
 		return NULL;
 	}
 
@@ -43,6 +46,17 @@ RSA* create_key(char* path, uid_t uid, int mode)
 	
 	if(!successful)
 	{
+		char private_dst[80];
+		strcpy(private_dst, path);
+		strcat(private_dst, "/private");
+		unlink(private_dst);
+		
+		char public_dst[80];
+		strcpy(public_dst, path);
+		strcat(public_dst, "/public");
+		unlink(public_dst);
+		
+		rmdir(path);
 		ERR_print_errors_fp(stderr);
 		return NULL;
 	}
@@ -50,14 +64,17 @@ RSA* create_key(char* path, uid_t uid, int mode)
 	return rsa_key;
 }
 
-RSA* new_user(char* path, uid_t uid)
+RSA* new_user(char* path)
 {
-	if(create_key(path, uid, PUBLIC))
-		return create_key(path, uid, PRIVATE);
+	RSA* rsa_key;
+	if(create_key(path, PUBLIC))
+		if((rsa_key = create_key(path, PRIVATE)))
+			return rsa_key;
+	
 	return NULL;
 }
 
-RSA* existing_user(char* path, uid_t uid)
+RSA* existing_user(char* path)
 {
 	char key_path[80];
 	strcpy(key_path, path);
@@ -72,7 +89,7 @@ RSA* existing_user(char* path, uid_t uid)
 		}
 		RSA_free(rsa_key);
 	}
-	fprintf(stderr, "Couldn't read the key\n");
+	fprintf(stderr, "uid_crypto.c - Couldn't read the key\n");
 	return NULL;
 }
 
@@ -86,13 +103,13 @@ RSA* get_uid_rsa()
 	
 	int err = mkdir(path, S_IRWXU);
 	printf("%s\n", path);
-	printf("error info: %d\n", err);
+	printf("Saman - error info: %d\n", err);
 	if(err == -1)
-		return existing_user(path, current_uid);
+		return existing_user(path);
 	else if(err == 0)
-		return new_user(path, current_uid);
+		return new_user(path);
 	else 
-		fprintf(stderr, "Unexpected error");
+		fprintf(stderr, "uid_crypto.c - Unexpected error");
 	return NULL;
 }
 

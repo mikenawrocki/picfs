@@ -7,11 +7,8 @@
 #include <openssl/rand.h>
 #include <unistd.h>
 
-RSA* existing_user(char* path, uid_t uid);
-RSA* create_key(char* path, uid_t uid, int mode);
-RSA* new_user(char* path, uid_t uid);
+RSA* existing_user(char* path);
+RSA* create_key(char* path, int mode);
+RSA* new_user(char* path);
 RSA* get_uid_rsa();
 void init_openssl();
-
-const int PUBLIC = 1;
-const int PRIVATE = 2;

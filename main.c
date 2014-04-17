@@ -16,6 +16,7 @@
 #include <openssl/pem.h>
 #include <openssl/err.h>
 
+#include "uid_crypto.h"
 #include "acl.h"
 #include "crypto.h"
 
@@ -510,5 +511,9 @@ int main(int argc, char *argv[])
 	argv[argc-1] = NULL;
 	argc--;
 
-	return fuse_main(argc, argv, &mpv_oper, NULL);
+	RSA *keypair = get_uid_rsa();
+	if(keypair)
+		return fuse_main(argc, argv, &mpv_oper, NULL);
+	else
+		exit(1);
 }
