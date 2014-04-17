@@ -1,7 +1,10 @@
 #include "uid_crypto.h"
+#include <limits.h>
 
 const int PUBLIC = 1;
 const int PRIVATE = 2;
+
+extern char *backing_dir;
 
 RSA* create_key(char* path, int mode)
 {
@@ -67,6 +70,7 @@ RSA* create_key(char* path, int mode)
 RSA* new_user(char* path)
 {
 	RSA* rsa_key;
+	fprintf(stderr, "Creating new user!\n");
 	if(create_key(path, PUBLIC))
 		if((rsa_key = create_key(path, PRIVATE)))
 			return rsa_key;
@@ -97,15 +101,27 @@ RSA* get_uid_rsa()
 {
 	init_openssl();
 	uid_t current_uid = getuid();
-	char path[80];
-	strcpy(path, "keys/%d");
-	sprintf(path, path, current_uid);
+	char path[PATH_MAX];
+	char uid_str[16];
+
+	snprintf(path, PATH_MAX, "%s/keys/", backing_dir);
+
+	int err = mkdir(path, 0);
+	if(err < 0) {
+		if(errno != EEXIST)
+			return NULL;
+	}
+	chmod(path, 0777);
+
+	snprintf(uid_str, 16, "%u", current_uid);
+	strncat(path, uid_str, PATH_MAX);
 	
-	int err = mkdir(path, S_IRWXU);
-	printf("%s\n", path);
-	printf("Saman - error info: %d\n", err);
-	if(err == -1)
+	err = mkdir(path, S_IRWXU);
+	if(err == -1) {
+		if(errno != EEXIST)
+			return NULL;
 		return existing_user(path);
+	}
 	else if(err == 0)
 		return new_user(path);
 	else 
