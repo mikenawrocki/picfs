@@ -6,21 +6,11 @@ const int PRIVATE = 2;
 
 extern char *backing_dir;
 
-RSA* create_key(char* path, int mode)
+RSA* create_keypair(char* path)
 {
 	//creating the private key
-	char key_path[80];
-	strcpy(key_path, path);
-
-	if(mode == PRIVATE)
-		strcat(key_path, "/private");
-	else if(mode == PUBLIC)
-		strcat(key_path, "/public");
-	else
-	{
-		fprintf(stderr, "uid_crypto.c - Undefined mode\n");
-		return NULL;
-	}
+	char key_path[PATH_MAX];
+	snprintf(key_path, PATH_MAX, "%s/private", path);
 
 	//generating the RSA 
 	int num = 2048; // less than 1024 is considered not secure
@@ -36,45 +26,45 @@ RSA* create_key(char* path, int mode)
 
 	FILE* file = fopen(key_path, "w+");
 	int successful = 0;
-	if(mode == PRIVATE)
-	{
-		const EVP_CIPHER* cipher = EVP_aes_256_cbc();
-		successful = PEM_write_RSAPrivateKey(file,rsa_key,cipher,NULL,0,NULL,NULL);
-		chmod(key_path, 0600);
-	} else if(mode == PUBLIC)
-	{
-		successful = PEM_write_RSA_PUBKEY(file,rsa_key);
-	}
-	
-	fclose(file);
-	
+	const EVP_CIPHER* cipher = EVP_aes_256_cbc();
+	successful = PEM_write_RSAPrivateKey(file,rsa_key,cipher,NULL,0,NULL,NULL);
 	if(!successful)
-	{
-		char private_dst[80];
-		strcpy(private_dst, path);
-		strcat(private_dst, "/private");
-		unlink(private_dst);
-		
-		char public_dst[80];
-		strcpy(public_dst, path);
-		strcat(public_dst, "/public");
-		unlink(public_dst);
-		
-		rmdir(path);
-		ERR_print_errors_fp(stderr);
-		return NULL;
-	}
+		goto failure;
+	chmod(key_path, 0600);
+	fclose(file);
+
+	snprintf(key_path, PATH_MAX, "%s/public", path);
+	file = fopen(key_path, "w+");
+	successful = PEM_write_RSA_PUBKEY(file,rsa_key);
+	if(!successful)
+		goto failure;
+	fclose(file);
 
 	return rsa_key;
+
+failure:
+	fclose(file);
+	char private_dst[80];
+	strcpy(private_dst, path);
+	strcat(private_dst, "/private");
+	unlink(private_dst);
+
+	char public_dst[80];
+	strcpy(public_dst, path);
+	strcat(public_dst, "/public");
+	unlink(public_dst);
+
+	rmdir(path);
+	ERR_print_errors_fp(stderr);
+	return NULL;
 }
 
 RSA* new_user(char* path)
 {
 	RSA* rsa_key;
 	fprintf(stderr, "Creating new user!\n");
-	if(create_key(path, PUBLIC))
-		if((rsa_key = create_key(path, PRIVATE)))
-			return rsa_key;
+	if((rsa_key = create_keypair(path)))
+		return rsa_key;
 	
 	return NULL;
 }

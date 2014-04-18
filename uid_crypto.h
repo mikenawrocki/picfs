@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 RSA* existing_user(char* path);
-RSA* create_key(char* path, int mode);
+RSA* create_keypair(char* path);
 RSA* new_user(char* path);
 RSA* get_uid_rsa();
 void init_openssl();
