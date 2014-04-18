@@ -25,8 +25,8 @@ int metadata_uid_exists(FILE *metadata, uid_t uid);
  * Returns the number of bytes that were decrypted (should always be 32 for
  * AES256)
  */
-int decrypt_metadata(FILE *metadata, char *key_buf, char *iv_buf, size_t keylen,
-		size_t ivlen);
+int decrypt_metadata(FILE *metadata, unsigned char *key_buf,
+		unsigned char *iv_buf, size_t keylen, size_t ivlen);
 
 /*
  * Encrypt a provided symmetric key using a target user's public RSA key.
@@ -35,8 +35,8 @@ int decrypt_metadata(FILE *metadata, char *key_buf, char *iv_buf, size_t keylen,
  * the key, and should always be 256 bytes in length. The return should be this
  * 256 byte length.
  */
-int encrypt_symmetric_key(uid_t target, const char *key, size_t key_len,
-		char *buf, size_t buf_len);
+int encrypt_symmetric_key(uid_t target, const unsigned char *key,
+		size_t key_len, char *buf, size_t buf_len);
 
 /*
  * Write a new user_key structure to an existing metadata file. Increments
@@ -49,7 +49,7 @@ int write_new_user_key(FILE *metadata, struct user_key *uk);
  * should be called before any of the other functions, which rely on a present
  * metadata file.
  */
-int create_metadata_file(const char *path, const char *IV);
+int create_metadata_file(const char *path, const unsigned char *IV);
 
 /*
  * Create an encrypted version of a file's symmetric key for a particular user.
@@ -60,7 +60,7 @@ int create_metadata_file(const char *path, const char *IV);
  * file creation for example), the specified key is encrypted with the target
  * uid's public key and a corresponding entry is created in the metadata file.
  */
-int add_user_key(FILE *metadata, uid_t uid, char *key);
+int add_user_key(FILE *metadata, uid_t uid, unsigned char *key);
 
 /*
  * Initializes EVP_CIPHER_CTX for encrypting and decrypting 256_cbc_aes
@@ -74,7 +74,7 @@ void mpv_aes_init(unsigned char *key, unsigned char *iv, EVP_CIPHER_CTX *e_ctx,
  * encrypt plaintext. Supply the plaintext and its corresponding length.
  * The len field will be replaced by the length of the returned cryptotext.
  */
-unsigned char *mpv_aes_encrypt(EVP_CIPHER_CTX *e, unsigned char *plaintext,
+unsigned char *mpv_aes_encrypt(EVP_CIPHER_CTX *e, char *plaintext,
 		int *len);
 
 /*

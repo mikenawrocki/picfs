@@ -2,6 +2,7 @@
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
+#include <openssl/aes.h>
 #include <openssl/evp.h>
 #include <stdio.h>
 #include <string.h>
@@ -15,7 +16,6 @@
 #include "crypto.h"
 
 RSA *keypair;
-
 extern char *backing_dir;
 
 int metadata_uid_exists(FILE *metadata, uid_t uid)
@@ -37,8 +37,8 @@ int metadata_uid_exists(FILE *metadata, uid_t uid)
 	return 0;
 }
 
-int decrypt_metadata(FILE *metadata, char *key_buf, char *iv_buf, size_t keylen,
-		size_t ivlen)
+int decrypt_metadata(FILE *metadata, unsigned char *key_buf,
+		unsigned char *iv_buf, size_t keylen, size_t ivlen)
 {
 	int read_num, i, ret = 0;
 	struct metadata md;
@@ -80,8 +80,8 @@ int decrypt_metadata(FILE *metadata, char *key_buf, char *iv_buf, size_t keylen,
 	return ret;
 }
 
-int encrypt_symmetric_key(uid_t target, const char *key, size_t key_len,
-		char *buf, size_t buf_len)
+int encrypt_symmetric_key(uid_t target, const unsigned char *key,
+		size_t key_len, char *buf, size_t buf_len)
 {
 	int ret = 0;
 	char pub_key_path[PATH_MAX];
@@ -135,7 +135,7 @@ int write_new_user_key(FILE *metadata, struct user_key *uk)
 	return ret;
 }
 
-int create_metadata_file(const char *path, const char *IV)
+int create_metadata_file(const char *path, const unsigned char *IV)
 {
 	struct metadata md;
 	FILE *metadata = fopen(path, "w+");
@@ -149,7 +149,7 @@ int create_metadata_file(const char *path, const char *IV)
 	return 0;
 }
 
-int add_user_key(FILE *metadata, uid_t uid, char *key)
+int add_user_key(FILE *metadata, uid_t uid, unsigned char *key)
 {
 	int encrypt_len, ret = 0;
 	int text_len = 32;
@@ -161,8 +161,7 @@ int add_user_key(FILE *metadata, uid_t uid, char *key)
 
 	if(!key) {
 		key = malloc(AES256_KEYLEN);
-		text_len = decrypt_metadata(metadata, key, NULL,
-				AES256_KEYLEN, 0);
+		text_len = decrypt_metadata(metadata, key, NULL, AES256_KEYLEN, 0);
 		if(text_len < 0)
 			return -1;
 	}
@@ -189,14 +188,14 @@ void mpv_aes_init(unsigned char *key, unsigned char *iv, EVP_CIPHER_CTX *e_ctx,
 	}
 }
 
-unsigned char *mpv_aes_encrypt(EVP_CIPHER_CTX *e, unsigned char *plaintext,
+unsigned char *mpv_aes_encrypt(EVP_CIPHER_CTX *e, char *plaintext,
 		int *len)
 {
 	int c_len = *len + AES_BLOCK_SIZE, f_len = 0;
 	unsigned char *ciphertext = malloc(c_len);
 
 	EVP_EncryptInit_ex(e, NULL, NULL, NULL, NULL);
-	EVP_EncryptUpdate(e, ciphertext, &c_len, plaintext, *len);
+	EVP_EncryptUpdate(e, ciphertext, &c_len, (unsigned char*)plaintext, *len);
 	EVP_EncryptFinal_ex(e, ciphertext + c_len, &f_len);
 
 	*len = c_len + f_len;
