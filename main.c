@@ -207,11 +207,10 @@ static int mpv_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	add_user_key(metadata, uid, key);
 	fclose(metadata);
 
-	char *decrypt_buf = malloc(sizeof(char));
 	table_entry *e = malloc(sizeof(table_entry));
 	e->fd = fd;
-	e->len = 1;
-	e->decrypt_buf= decrypt_buf;
+	e->len = 0;
+	e->decrypt_buf = NULL;
 	HASH_ADD_INT(fd_to_decrypted, fd, e);
 	fi->fh = fd;
 
