@@ -19,6 +19,7 @@
 #include <openssl/rsa.h>
 #include <openssl/pem.h>
 #include <openssl/err.h>
+#include <regex.h>
 
 #include "uid_crypto.h"
 #include "acl.h"
@@ -60,6 +61,12 @@ static int mpv_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 {
 	DIR *dirp;
 	struct dirent *ent;
+	static regex_t *restricted_paths = NULL;
+	fprintf(stderr, "%s\n", path);
+	if(!restricted_paths) {
+		restricted_paths = malloc(sizeof(regex_t));
+		regcomp(restricted_paths, "(\\.meta$)", REG_EXTENDED);
+	}
 
 	dirp = (DIR *)fi->fh;
 
@@ -68,13 +75,9 @@ static int mpv_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	}
 
 	do {
-		// Hides key directory 
-		if(!strstr(ent->d_name, "keys")) {
-			// Hides .meta directory entries
-			if(!strstr(ent->d_name, ".meta")) {
-				if(filler(buf, ent->d_name, NULL, 0)) {
-					return -ENOMEM;
-				}
+		if(regexec(restricted_paths, ent->d_name, 0, NULL, 0)) {
+			if(filler(buf, ent->d_name, NULL, 0)) {
+				return -ENOMEM;
 			}
 		}
 	} while((ent = readdir(dirp)));
@@ -102,7 +105,7 @@ static int mpv_open(const char *path, struct fuse_file_info *fi)
 	int fd, olen, len;
 	char fpath[PATH_MAX], *decrypt_buf;
 	unsigned char *mapped_file;
-	unsigned char *key = malloc(AES256_KEYLEN), *iv = malloc(IVLEN);
+	unsigned char key[AES256_KEYLEN], iv[IVLEN];
 
 	make_path(fpath, path);
 	if((fd = open(fpath, fi->flags)) < 0) {
@@ -115,12 +118,15 @@ static int mpv_open(const char *path, struct fuse_file_info *fi)
 
 	mapped_file = (unsigned char*)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (mapped_file == MAP_FAILED) {
-		perror("JAKE ERROR");
 		return -errno;
 	}
 
 	strncat(fpath, ".meta", PATH_MAX);
 	FILE *metadata = fopen(fpath, "r");
+	if(!metadata) { //File without associated metadata.
+		return -EACCES;
+	}
+
 	decrypt_metadata(metadata, key, iv, AES256_KEYLEN, IVLEN);
 	fclose(metadata);
 
@@ -129,8 +135,6 @@ static int mpv_open(const char *path, struct fuse_file_info *fi)
 	mpv_aes_init(key, iv, NULL, &d_ctx);
 	decrypt_buf = (char *)mpv_aes_decrypt(&d_ctx, mapped_file, &len);
 	EVP_CIPHER_CTX_cleanup(&d_ctx);
-	free(key);
-	free(iv);
 
 	munmap(mapped_file, olen);
 
@@ -676,7 +680,7 @@ int main(int argc, char *argv[])
 	argv[argc-1] = NULL;
 	argc--;
 
-	RSA *keypair = get_uid_rsa();
+	keypair = get_uid_rsa();
 	if(keypair)
 		return fuse_main(argc, argv, &mpv_oper, NULL);
 	else

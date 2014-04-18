@@ -18,9 +18,6 @@
 RSA *keypair;
 extern char *backing_dir;
 
-
-extern char *backing_dir;
-
 int metadata_uid_exists(FILE *metadata, uid_t uid)
 {
 	int i, read_num;
