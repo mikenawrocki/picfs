@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <fuse.h>
+#include <libgen.h>
 #include <limits.h>
 #include <openssl/pem.h>
 #include <openssl/rand.h>
@@ -26,6 +27,7 @@
 #include "crypto.h"
 #include "metadata.h"
 #include "uthash/uthash.h"
+#include "exif.h"
 
 typedef struct table_entry {
 	int fd; /*key for hash table*/
@@ -412,15 +414,22 @@ static int mpv_readlink(const char *path, char *buf, size_t bufsiz)
 static int mpv_release(const char *path, struct fuse_file_info *fi)
 {
 	int ret = 0;
-	unsigned char *key = malloc(AES256_KEYLEN), *iv = malloc(IVLEN);
+	unsigned char key[AES256_KEYLEN], iv[IVLEN];
 	unsigned char *encrypt_buf;
 	char mpath[PATH_MAX];
+	char fpath[PATH_MAX];
+	static regex_t *sorted_path = NULL;
+	if(!sorted_path) {
+		sorted_path = malloc(sizeof(regex_t));
+		regcomp(sorted_path, "/sorted/[^\\/]+$", REG_EXTENDED);
+	}
 
 	table_entry *e;
 	HASH_FIND_INT(fd_to_decrypted, &fi->fh, e);
 	if(!e) fprintf(stderr, "Hash Key not found!\n");
 
-	make_path(mpath, path);
+	make_path(fpath, path);
+	strncpy(mpath, fpath, PATH_MAX);
 	strncat(mpath, ".meta", PATH_MAX);
 	FILE *metadata = fopen(mpath, "r");
 	decrypt_metadata(metadata, key, iv, AES256_KEYLEN, IVLEN);
@@ -432,23 +441,52 @@ static int mpv_release(const char *path, struct fuse_file_info *fi)
 	mpv_aes_init(key, iv, &e_ctx, NULL);
 	encrypt_buf = mpv_aes_encrypt(&e_ctx, e->decrypt_buf, &e->len);
 	EVP_CIPHER_CTX_cleanup(&e_ctx);
-	free(key);
-	free(iv);
 
 
 	// Write buff back to file
 	ftruncate(fi->fh, 0);
 	pwrite(fi->fh, encrypt_buf, e->len, 0);
 
+	if((ret = close(fi->fh)) < 0) {
+		ret = -errno;
+	}
+	else if(!regexec(sorted_path, path, 0, NULL, 0)) {
+		char *date = exif_date(e->decrypt_buf, e->len);
+		// Need to make copies, dirname() and basename() can modify
+		// their arguments...
+		char *fpath_copy = strndup(fpath, PATH_MAX);
+		char *path_copy = strndup(path, PATH_MAX);
+
+		char *fdirpath = dirname(fpath_copy);
+		char *fname = basename(path_copy);
+		char *newpath = NULL;
+		if(!date) {
+			newpath = malloc(PATH_MAX);
+			strncpy(newpath, fdirpath, PATH_MAX);
+			strncat(newpath, "/unknown/", PATH_MAX);
+			mkdir(newpath, 0755);
+		}
+		else {
+			newpath = make_date_path(fdirpath, date);
+		}
+
+		if(newpath) {
+			strncat(newpath, fname, PATH_MAX);
+			rename(fpath, newpath);
+			strncat(newpath, ".meta", PATH_MAX);
+			rename(mpath, newpath);
+		}
+		free(newpath);
+		free(date);
+		free(fpath_copy);
+		free(path_copy);
+	}
+
 	// Clean up
 	HASH_DEL(fd_to_decrypted, e);
 	free(e->decrypt_buf);
 	free(e);
 	free(encrypt_buf);
-
-	if((ret = close(fi->fh)) < 0) {
-		ret = -errno;
-	}
 
 	return ret;
 }
