@@ -421,7 +421,7 @@ static int mpv_release(const char *path, struct fuse_file_info *fi)
 	static regex_t *sorted_path = NULL;
 	if(!sorted_path) {
 		sorted_path = malloc(sizeof(regex_t));
-		regcomp(sorted_path, "/sorted/[^\\/]+$", REG_EXTENDED);
+		regcomp(sorted_path, "\\/sorted/[^\\/]+$", REG_EXTENDED);
 	}
 
 	table_entry *e;
