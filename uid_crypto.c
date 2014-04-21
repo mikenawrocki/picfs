@@ -44,12 +44,12 @@ RSA* create_keypair(char* path)
 
 failure:
 	fclose(file);
-	char private_dst[80];
+	char private_dst[PATH_MAX];
 	strcpy(private_dst, path);
 	strcat(private_dst, "/private");
 	unlink(private_dst);
 
-	char public_dst[80];
+	char public_dst[PATH_MAX];
 	strcpy(public_dst, path);
 	strcat(public_dst, "/public");
 	unlink(public_dst);
@@ -62,7 +62,7 @@ failure:
 RSA* new_user(char* path)
 {
 	RSA* rsa_key;
-	fprintf(stderr, "Creating new user!\n");
+	printf("Creating new user!\n");
 	if((rsa_key = create_keypair(path)))
 		return rsa_key;
 	
@@ -71,7 +71,7 @@ RSA* new_user(char* path)
 
 RSA* existing_user(char* path)
 {
-	char key_path[80];
+	char key_path[PATH_MAX];
 	strcpy(key_path, path);
 	strcat(key_path, "/private");
 	FILE* file = fopen(key_path, "r+");

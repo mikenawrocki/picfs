@@ -64,7 +64,6 @@ static int mpv_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	DIR *dirp;
 	struct dirent *ent;
 	static regex_t *restricted_paths = NULL;
-	fprintf(stderr, "%s\n", path);
 	if(!restricted_paths) {
 		restricted_paths = malloc(sizeof(regex_t));
 		regcomp(restricted_paths, "(\\.meta$)", REG_EXTENDED);
@@ -115,32 +114,38 @@ static int mpv_open(const char *path, struct fuse_file_info *fi)
 		return -errno;
 	}
 
-	olen = len = lseek(fd, 0, SEEK_END);
-	lseek(fd, 0, SEEK_SET);
-
-	mapped_file = (unsigned char*)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
-	if (mapped_file == MAP_FAILED) {
-		return -errno;
+	if(fi->flags & O_TRUNC) {
+		decrypt_buf = NULL;
+		len = 0;
 	}
+	else {
+		olen = len = lseek(fd, 0, SEEK_END);
+		lseek(fd, 0, SEEK_SET);
 
-	strncat(fpath, ".meta", PATH_MAX);
-	FILE *metadata = fopen(fpath, "r");
-	if(!metadata) { //File without associated metadata.
-		return -EACCES;
+		mapped_file = (unsigned char*)mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
+		if (mapped_file == MAP_FAILED) {
+			return -errno;
+		}
+
+		strncat(fpath, ".meta", PATH_MAX);
+		FILE *metadata = fopen(fpath, "r");
+		if(!metadata) { //File without associated metadata.
+			return -EACCES;
+		}
+
+		decrypt_metadata(metadata, key, iv, AES256_KEYLEN, IVLEN);
+		fclose(metadata);
+
+		// decrypt buffer
+		EVP_CIPHER_CTX d_ctx;
+		mpv_aes_init(key, iv, NULL, &d_ctx);
+		decrypt_buf = (char *)mpv_aes_decrypt(&d_ctx, mapped_file, &len);
+		EVP_CIPHER_CTX_cleanup(&d_ctx);
+
+		munmap(mapped_file, olen);
+
+		//printf("decrypt_buff: %s\n", decrypt_buf);
 	}
-
-	decrypt_metadata(metadata, key, iv, AES256_KEYLEN, IVLEN);
-	fclose(metadata);
-
-	// decrypt buffer
-	EVP_CIPHER_CTX d_ctx;
-	mpv_aes_init(key, iv, NULL, &d_ctx);
-	decrypt_buf = (char *)mpv_aes_decrypt(&d_ctx, mapped_file, &len);
-	EVP_CIPHER_CTX_cleanup(&d_ctx);
-
-	munmap(mapped_file, olen);
-
-	//printf("decrypt_buff: %s\n", decrypt_buf);
 
 	table_entry *e = malloc(sizeof(table_entry));
 	e->fd = fd;
@@ -160,7 +165,6 @@ static int mpv_read(const char *path, char *buf, size_t size, off_t offset,
 	if(!e) return -errno;
 
 	if (size + offset > e->len) {
-		printf("Read was %zu shrink to %ld\n", size, e->len - offset);
 		size = e->len - offset;
 	}
 
@@ -176,7 +180,6 @@ static int mpv_write(const char *path, const char *buf, size_t size,
 	if(!e) return -errno;
 
 	if(size + offset > e->len) {
-		printf("Resizing from: %d to %lu bytes\n", e->len, size + offset);
 		e->decrypt_buf = realloc(e->decrypt_buf, size+offset);
 		e->len = size + offset;
 	}
@@ -436,7 +439,6 @@ static int mpv_release(const char *path, struct fuse_file_info *fi)
 	fclose(metadata);
 
 	// Encrypt buffer
-	printf("to encrypt: %s", e->decrypt_buf);
 	EVP_CIPHER_CTX e_ctx;
 	mpv_aes_init(key, iv, &e_ctx, NULL);
 	encrypt_buf = mpv_aes_encrypt(&e_ctx, e->decrypt_buf, &e->len);
@@ -652,6 +654,7 @@ static int mpv_unlink(const char *path)
 static int mpv_truncate(const char *path, off_t offset)
 {
 	struct fuse_file_info *fi = malloc(sizeof(struct fuse_file_info));
+	fi->flags = O_RDWR | O_TRUNC;
 
 	mpv_open(path, fi);
 	int ret = mpv_ftruncate(NULL, 0, fi);
@@ -676,7 +679,14 @@ static int mpv_statfs(const char *path, struct statvfs *statv)
 	return ret;
 }
 
+static void *mpv_init(struct fuse_conn_info *conn)
+{
+	conn->want = FUSE_CAP_ATOMIC_O_TRUNC;
+	return NULL;
+}
+
 static struct fuse_operations mpv_oper = {
+	.init		= mpv_init,
 	.getattr	= mpv_getattr,
 	.opendir	= mpv_opendir,
 	.readdir	= mpv_readdir,

@@ -75,7 +75,6 @@ int decrypt_metadata(FILE *metadata, unsigned char *key_buf,
 		fprintf(stderr, "Error decrypting message: %s\n", err);
 		ret = -1;
 	}
-	printf("Decrypted message: %s\n", key_buf);
 	free(err);
 	return ret;
 }
