@@ -114,7 +114,7 @@ static int mpv_open(const char *path, struct fuse_file_info *fi)
 		return -errno;
 	}
 
-	if(fi->flags & O_TRUNC) {
+	if(fi->flags & O_TRUNC && (fi->flags & O_RDWR || fi->flags & O_WRONLY)) {
 		decrypt_buf = NULL;
 		len = 0;
 	}
